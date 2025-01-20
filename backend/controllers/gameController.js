@@ -132,7 +132,6 @@ const makeMove = async (req, res) => {
     const player2Id = game.player2 ? game.player2.toString() : null;
     const turnId = game.turn.toString();
 
-    // Inside makeMove function, add these console.logs:
     console.log({
       requestUserId: currentPlayerId,
       gamePlayer1: player1Id,
@@ -140,6 +139,7 @@ const makeMove = async (req, res) => {
       gameTurn: turnId,
       fullGame: game,
     });
+    
     // Validate player belongs to the game
     if (currentPlayerId !== player1Id && currentPlayerId !== player2Id) {
       return res
@@ -211,7 +211,7 @@ const makeMove = async (req, res) => {
   }
 };
 
-// Helper functions remain the same
+
 const checkWinner = (board) => {
   for (let i = 0; i < 3; i++) {
     if (
@@ -267,7 +267,7 @@ const getGameState = async (req, res) => {
 const getMatchHistory = async (req, res) => {
   try {
     const userId = req.user.userId;
-    console.log("Fetching history for user:", userId);  // Debug log
+    console.log("Fetching history for user:", userId);  
 
     // Convert userId to ObjectId
     const userObjectId = new mongoose.Types.ObjectId(userId);
@@ -282,9 +282,9 @@ const getMatchHistory = async (req, res) => {
     .populate('player2', 'username')
     .sort({ updatedAt: -1 });
 
-    console.log("Found games:", games.length);  // Debug log
+    console.log("Found games:", games.length);  
 
-    // Format the response
+    
     const formattedGames = games.map(game => ({
       gameId: game._id,
       startDate: game.createdAt,
@@ -306,7 +306,7 @@ const getMatchHistory = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error in getMatchHistory:', error);  // Debug log
+    console.error('Error in getMatchHistory:', error);  
     res.status(500).json({ 
       message: "Error fetching match history", 
       error: error.message 
