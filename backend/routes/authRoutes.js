@@ -1,15 +1,11 @@
 import express from 'express';
-import { registerUser, loginUser  } from '../controllers/userController.js';
+import { registerUser, loginUser, updateProfile } from '../controllers/userController.js';
+import { protect } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// User registration route
 router.post('/register', registerUser);
-
-// User login route
 router.post('/login', loginUser);
-
-//updae user profile
-
+router.put('/profile', protect, updateProfile);  // Add this line
 
 export default router;

@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
 
+
 const protect = (req, res, next) => {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
+  const token = req.header('Authorization')?.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({ message: 'No token, authorization denied' });
@@ -9,11 +10,17 @@ const protect = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // Attach user data to request object
+    req.user = {
+      userId: decoded.userId,  // Make sure this is set correctly
+      username: decoded.username
+    };
     next();
   } catch (error) {
-    return res.status(401).json({ message: 'Token is not valid' });
+    res.status(401).json({ message: 'Token is not valid' });
   }
 };
 
-export default protect;
+export { protect };
+
+
+
