@@ -2,21 +2,58 @@ import Game from "../models/Game.js";
 import User from "../models/User.js";
 import mongoose from "mongoose";
 
+// Constants for game status
+const GAME_STATUS = {
+  WAITING: "waiting",
+  ONGOING: "ongoing",
+  FINISHED: "finished",
+};
+
+// Utility function to initialize the board
+const initializeBoard = () => [
+  ["-", "-", "-"],
+  ["-", "-", "-"],
+  ["-", "-", "-"],
+];
+
+// Validate move input
+const validateMoveInput = (gameId, row, column) => {
+  if (!gameId || row === undefined || column === undefined) {
+    throw new Error("Missing required parameters: gameId, row, and column are required");
+  }
+  if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || row > 2 || column < 0 || column > 2) {
+    throw new Error("Invalid move: row and column must be integers between 0 and 2");
+  }
+  if (!mongoose.Types.ObjectId.isValid(gameId)) {
+    throw new Error("Invalid game ID format");
+  }
+};
+
+// Check for a winner
+const checkWinner = (board) => {
+  for (let i = 0; i < 3; i++) {
+    if (board[i][0] !== "-" && board[i][0] === board[i][1] && board[i][1] === board[i][2]) return true;
+    if (board[0][i] !== "-" && board[0][i] === board[1][i] && board[1][i] === board[2][i]) return true;
+  }
+  if (board[0][0] !== "-" && board[0][0] === board[1][1] && board[1][1] === board[2][2]) return true;
+  if (board[0][2] !== "-" && board[0][2] === board[1][1] && board[1][1] === board[2][0]) return true;
+  return false;
+};
+
+// Check if the board is full
+const isBoardFull = (board) => board.every((row) => row.every((cell) => cell !== "-"));
+
 // Start a new game
 const startGame = async (req, res) => {
   try {
-    const player1Id = req.user.userId; // Make sure we're using the string ID
+    const player1Id = req.user.userId;
     console.log("Starting game with player1:", player1Id);
 
     const newGame = new Game({
       player1: new mongoose.Types.ObjectId(player1Id),
-      board: [
-        ["-", "-", "-"],
-        ["-", "-", "-"],
-        ["-", "-", "-"],
-      ],
-      status: "waiting",
-      turn: new mongoose.Types.ObjectId(player1Id), // Make sure turn is set to player1
+      board: initializeBoard(),
+      status: GAME_STATUS.WAITING,
+      turn: new mongoose.Types.ObjectId(player1Id),
     });
 
     await newGame.save();
@@ -34,6 +71,7 @@ const startGame = async (req, res) => {
     });
   }
 };
+
 // Join an existing game
 const joinGame = async (req, res) => {
   try {
@@ -45,162 +83,78 @@ const joinGame = async (req, res) => {
       return res.status(404).json({ message: "Game not found" });
     }
 
-    // Make sure game isn't full
-    if (game.player2) {
-      return res.status(400).json({ message: "Game is already full" });
+    if (game.status !== GAME_STATUS.WAITING) {
+      return res.status(400).json({ message: "Game is not available to join" });
     }
 
-    // Make sure player isn't joining their own game
-    if (game.player1.toString() === player2Id) {
-      return res.status(400).json({ message: "Cannot join your own game" });
-    }
-
-    // Update game with player2
     game.player2 = new mongoose.Types.ObjectId(player2Id);
-    game.status = "ongoing";
-    // Don't change the turn here - it should stay with player1
-
+    game.status = GAME_STATUS.ONGOING;
     await game.save();
-    console.log("Updated game after join:", game);
 
     res.status(200).json({
-      message: "Game joined successfully",
-      game: game
+      message: "Successfully joined the game",
+      game,
     });
   } catch (error) {
     console.error("Error in joinGame:", error);
     res.status(500).json({
       message: "Error joining game",
-      error: error.message
+      error: error.message,
     });
   }
 };
 
-// Make a move in the game
+// Make a move
 const makeMove = async (req, res) => {
   try {
     const { gameId, row, column } = req.body;
+    validateMoveInput(gameId, row, column);
 
-    // Validate input parameters
-    if (!gameId || row === undefined || column === undefined) {
-      return res.status(400).json({
-        message:
-          "Missing required parameters: gameId, row, and column are required",
-      });
-    }
-
-    // Validate row and column are numbers and within bounds
-    if (
-      !Number.isInteger(row) ||
-      !Number.isInteger(column) ||
-      row < 0 ||
-      row > 2 ||
-      column < 0 ||
-      column > 2
-    ) {
-      return res.status(400).json({
-        message:
-          "Invalid move: row and column must be integers between 0 and 2",
-      });
-    }
-
-    // Ensure gameId is valid ObjectId
-    if (!mongoose.Types.ObjectId.isValid(gameId)) {
-      return res.status(400).json({ message: "Invalid game ID format" });
-    }
-
-    // Get current player's ID from the token
-    const playerId = req.user.userId;
-
-    // Find the game without population first
     const game = await Game.findById(gameId);
-
     if (!game) {
       return res.status(404).json({ message: "Game not found" });
     }
 
-    // Validate game state
-    if (game.status !== "ongoing") {
-      return res.status(400).json({
-        message: `Game is not active. Current status: ${game.status}`,
-      });
+    if (game.status !== GAME_STATUS.ONGOING) {
+      return res.status(400).json({ message: "Game is not currently ongoing" });
     }
 
-    // Convert IDs to strings for comparison
-    const currentPlayerId = playerId.toString();
-    const player1Id = game.player1.toString();
-    const player2Id = game.player2 ? game.player2.toString() : null;
-    const turnId = game.turn.toString();
-
-    console.log({
-      requestUserId: currentPlayerId,
-      gamePlayer1: player1Id,
-      gamePlayer2: player2Id,
-      gameTurn: turnId,
-      fullGame: game,
-    });
-    
-    // Validate player belongs to the game
-    if (currentPlayerId !== player1Id && currentPlayerId !== player2Id) {
-      return res
-        .status(403)
-        .json({ message: "You are not a player in this game" });
+    const currentPlayerId = req.user.userId;
+    if (game.turn.toString() !== currentPlayerId) {
+      return res.status(403).json({ message: "It's not your turn" });
     }
 
-    // Validate turn
-    if (currentPlayerId !== turnId) {
-      return res.status(403).json({
-        message: "It's not your turn",
-      });
-    }
-
-    // Validate move position
     if (game.board[row][column] !== "-") {
-      return res.status(400).json({
-        message: "Invalid move: Position already taken",
-        board: game.board,
-      });
+      return res.status(400).json({ message: "Cell is already occupied" });
     }
 
-    // Make the move
-    const playerSymbol = currentPlayerId === player1Id ? "X" : "O";
-    game.board[row][column] = playerSymbol;
+    // Assign the move to the correct player
+    game.board[row][column] = game.player1.toString() === currentPlayerId ? "X" : "O";
 
-    // Check for winner
+    // Save the move to the history
+    game.moveHistory.push({
+      playerId: currentPlayerId,
+      move: { row, column },
+    });
+
+    // Check if there's a winner or the board is full
     if (checkWinner(game.board)) {
-      game.status = "finished";
-      game.winner = new mongoose.Types.ObjectId(currentPlayerId);
-      await game.save();
-
-      return res.status(200).json({
-        message: "Game Over! You won!",
-        game: game,
-      });
+      game.status = GAME_STATUS.FINISHED;
+      game.winner = new mongoose.Types.ObjectId(currentPlayerId); // Ensure it's an ObjectId
+    } else if (isBoardFull(game.board)) {
+      game.status = GAME_STATUS.FINISHED;
+      game.winner = null; // Draw
+    } else {
+      // Switch turn to the next player
+      game.turn = game.player1.toString() === currentPlayerId ? game.player2 : game.player1;
     }
 
-    // Check for draw
-    if (isBoardFull(game.board)) {
-      game.status = "finished";
-      game.winner = null;
-      await game.save();
-
-      return res.status(200).json({
-        message: "Game Over! It's a draw!",
-        game: game,
-      });
-    }
-
-    // Switch turn
-    game.turn =
-      currentPlayerId === player1Id
-        ? new mongoose.Types.ObjectId(player2Id)
-        : new mongoose.Types.ObjectId(player1Id);
-
+    // Save the game object
     await game.save();
 
     res.status(200).json({
       message: "Move made successfully",
-      game: game,
+      game,
     });
   } catch (error) {
     console.error("Error in makeMove:", error);
@@ -211,122 +165,83 @@ const makeMove = async (req, res) => {
   }
 };
 
-
-const checkWinner = (board) => {
-  for (let i = 0; i < 3; i++) {
-    if (
-      board[i][0] !== "-" &&
-      board[i][0] === board[i][1] &&
-      board[i][1] === board[i][2]
-    )
-      return true;
-    if (
-      board[0][i] !== "-" &&
-      board[0][i] === board[1][i] &&
-      board[1][i] === board[2][i]
-    )
-      return true;
-  }
-  if (
-    board[0][0] !== "-" &&
-    board[0][0] === board[1][1] &&
-    board[1][1] === board[2][2]
-  )
-    return true;
-  if (
-    board[0][2] !== "-" &&
-    board[0][2] === board[1][1] &&
-    board[1][1] === board[2][0]
-  )
-    return true;
-  return false;
-};
-
-const isBoardFull = (board) =>
-  board.every((row) => row.every((cell) => cell !== "-"));
-
-// Helper function to check if board is full (remains the same)
-
 // Get game state
 const getGameState = async (req, res) => {
   try {
     const { gameId } = req.params;
-    const game = await Game.findById(gameId);
 
-    if (!game) return res.status(404).json({ message: "Game not found" });
+    const game = await Game.findById(gameId)
+      .populate("player1 player2 winner")
+      .select("player1 player2 status winner moveHistory board createdAt");
+    if (!game) {
+      return res.status(404).json({ message: "Game not found" });
+    }
 
-    res.status(200).json({ game });
+    const gameResult = game.status === GAME_STATUS.FINISHED 
+      ? game.winner ? `${game.winner._id} wins` : "It's a draw" 
+      : "Game is ongoing";
+
+    res.status(200).json({
+      game: {
+        ...game.toObject(),
+        result: gameResult,
+      },
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error fetching game state", error: error.message });
+    console.error("Error in getGameState:", error);
+    res.status(500).json({
+      message: "Error retrieving game state",
+      error: error.message,
+    });
   }
 };
 
-// Match history
+// Get match history
 const getMatchHistory = async (req, res) => {
   try {
     const userId = req.user.userId;
-    console.log("Fetching history for user:", userId);  
-
-    // Convert userId to ObjectId
-    const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const games = await Game.find({
-      $or: [
-        { player1: userObjectId },
-        { player2: userObjectId }
-      ]
+      $or: [{ player1: userId }, { player2: userId }],
+      status: GAME_STATUS.FINISHED,
     })
-    .populate('player1', 'username')
-    .populate('player2', 'username')
-    .sort({ updatedAt: -1 });
+      .populate("player1 player2 winner") // populate the winner object here
+      .select("player1 player2 status winner moveHistory board createdAt");
 
-    console.log("Found games:", games.length);  
+    const matchHistory = games.map((game) => {
+      const opponent = game.player1._id.toString() === userId ? game.player2 : game.player1;
 
-    
-    const formattedGames = games.map(game => ({
-      gameId: game._id,
-      startDate: game.createdAt,
-      status: game.status,
-      opponent: game.player1._id.toString() === userId 
-        ? game.player2?.username || 'Waiting for player' 
-        : game.player1.username,
-      result: game.status === 'finished' 
-        ? game.winner 
-          ? (game.winner.toString() === userId ? 'Won' : 'Lost')
-          : 'Draw'
-        : 'Ongoing',
-      board: game.board
-    }));
+      const gameResult = game.status === GAME_STATUS.FINISHED
+        ? game.winner
+          ? `${game.winner._id}  wins` // Assuming winner has a `name` field
+          : "It's a draw"
+        : "Game is ongoing";
 
-    res.status(200).json({ 
-      message: "Match history retrieved successfully",
-      games: formattedGames 
+      return {
+        gameId: game._id,
+        opponent: {
+          id: opponent._id,
+          name: opponent.name,
+        },
+        result: gameResult,
+        moves: game.moveHistory,
+        finalBoard: game.board,
+        playedAt: game.createdAt,
+      };
     });
 
+    res.status(200).json({
+      matchHistory: matchHistory,
+    });
   } catch (error) {
-    console.error('Error in getMatchHistory:', error);  
-    res.status(500).json({ 
-      message: "Error fetching match history", 
-      error: error.message 
+    console.error("Error in getMatchHistory:", error);
+    res.status(500).json({
+      message: "Error retrieving match history",
+      error: error.message,
     });
   }
 };
 
-// Update user profile
-const updateUserProfile = async (req, res) => {
-  try {
-    const user = await User.findByIdAndUpdate(req.user.userId, req.body, {
-      new: true,
-    });
-    res.status(200).json({ message: "Profile updated successfully", user });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error updating profile", error: error.message });
-  }
-};
 
 export {
   startGame,
@@ -334,5 +249,4 @@ export {
   makeMove,
   getGameState,
   getMatchHistory,
-  updateUserProfile,
 };
