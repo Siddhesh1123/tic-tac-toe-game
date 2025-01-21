@@ -2,6 +2,11 @@ import mongoose from "mongoose";
 
 // Define the schema for the game
 const gameSchema = new mongoose.Schema({
+  name: {
+    type: String, // Name of the game
+    required: true, // Make it mandatory
+    trim: true, // Automatically removes leading/trailing spaces
+  },
   player1: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
@@ -31,7 +36,7 @@ const gameSchema = new mongoose.Schema({
     ref: "User",
     required: true, // Indicates which player's turn it is
   },
-  winner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, 
+  winner: { type: mongoose.Schema.Types.ObjectId, ref: "User"  },
   moveHistory: [
     {
       playerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

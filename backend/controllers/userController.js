@@ -9,7 +9,7 @@ const registerUser = async (req, res) => {
 
     // Ensure username is unique
     if (await User.findOne({ username })) {
-      return res.status(400).json({ message: 'Username already exists' });
+      return res.status(400).json({ message: 'User already exists' });
     }
 
     // Hash password before saving
@@ -62,7 +62,7 @@ const updateProfile = async (req, res) => {
       _id: { $ne: userId }  // Ensure it's not the same user
     });
     if (existingUser) {
-      return res.status(400).json({ message: 'Username already exists' });
+      return res.status(400).json({ message: 'User already exists' });
     }
 
     // Update user profile with new username

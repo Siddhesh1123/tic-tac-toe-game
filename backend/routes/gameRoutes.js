@@ -5,7 +5,8 @@ import {
     joinGame, 
     makeMove, 
     getGameState, 
-    getMatchHistory 
+    getMatchHistory,
+    fetchAllGames
 } from '../controllers/gameController.js';
 
 const router = express.Router();
@@ -24,5 +25,7 @@ router.post('/join/:gameId', protect, joinGame);
 
 // Make a Move : Protected route to submit a move in the game
 router.post('/move', protect, makeMove);
+
+
 
 export default router;

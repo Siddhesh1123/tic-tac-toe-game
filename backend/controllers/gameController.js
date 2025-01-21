@@ -1,5 +1,4 @@
 import Game from "../models/Game.js";
-import User from "../models/User.js";
 import mongoose from "mongoose";
 
 // Constants for game status
@@ -47,9 +46,19 @@ const isBoardFull = (board) => board.every((row) => row.every((cell) => cell !==
 const startGame = async (req, res) => {
   try {
     const player1Id = req.user.userId;
+    const { name } = req.body; // Extract the game name from the request body
+
     console.log("Starting game with player1:", player1Id);
 
+    // Ensure the game name is provided
+    if (!name) {
+      return res.status(400).json({
+        message: "Game name is required",
+      });
+    }
+
     const newGame = new Game({
+      name, // Save the game name from the request body
       player1: new mongoose.Types.ObjectId(player1Id),
       board: initializeBoard(),
       status: GAME_STATUS.WAITING,
@@ -172,7 +181,7 @@ const getGameState = async (req, res) => {
 
     const game = await Game.findById(gameId)
       .populate("player1 player2 winner")
-      .select("player1 player2 status winner moveHistory board createdAt");
+      .select("player1 player2 status winner moveHistory board createdAt name");
     if (!game) {
       return res.status(404).json({ message: "Game not found" });
     }
@@ -206,7 +215,7 @@ const getMatchHistory = async (req, res) => {
       status: GAME_STATUS.FINISHED,
     })
       .populate("player1 player2 winner") // populate the winner object here
-      .select("player1 player2 status winner moveHistory board createdAt");
+      .select("player1 player2 status winner moveHistory board createdAt name");
 
     const matchHistory = games.map((game) => {
       const opponent = game.player1._id.toString() === userId ? game.player2 : game.player1;
@@ -219,6 +228,7 @@ const getMatchHistory = async (req, res) => {
 
       return {
         gameId: game._id,
+        name: game.name,
         opponent: {
           id: opponent._id,
           name: opponent.name,
@@ -242,6 +252,29 @@ const getMatchHistory = async (req, res) => {
   }
 };
 
+// Fetch all games and remove the finished ones from the list
+const fetchAllGames = async (req, res) => {
+  try {
+    console.log("Fetching all games...");
+    const games = await Game.find();
+    console.log("Games fetched:", games);
+
+    res.status(200).json({
+      games: games,
+    });
+  } catch (error) {
+    console.error("Error in fetchAllGames:", error);
+    res.status(500).json({
+      message: "Error fetching all games",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+
 
 export {
   startGame,
@@ -249,4 +282,5 @@ export {
   makeMove,
   getGameState,
   getMatchHistory,
+  fetchAllGames
 };
