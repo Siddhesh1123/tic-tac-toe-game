@@ -32,9 +32,7 @@ npm install
 
 ```
 DB_URL = (mongodb url)
-```
 
-```
 JWT_SECRET = (jwt secret key)
 ```
 
