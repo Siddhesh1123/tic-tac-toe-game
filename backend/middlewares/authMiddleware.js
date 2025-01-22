@@ -1,12 +1,18 @@
-import jwt from 'jsonwebtoken';
+import jwt from "jsonwebtoken";
 
 // Middleware to protect routes by verifying JWT token
 const protect = (req, res, next) => {
-  // Extract the token from the Authorization header
-  const token = req.header('Authorization')?.split(' ')[1];
+  // Extract the token from the Authorization header, cookies, or request body
+  const token =
+    req.cookies.token ||
+    req.body.token ||
+    (req.header("Authorization") &&
+      req.header("Authorization").replace("Bearer ", "").trim());
+
 
   if (!token) {
-    return res.status(401).json({ message: 'No token, authorization denied' }); // Return 401 if no token
+    console.log("res: ", res);
+    return res.status(401).json({ message: "No token, authorization denied" }); // Return 401 if no token
   }
 
   try {
@@ -15,13 +21,14 @@ const protect = (req, res, next) => {
 
     // Attach decoded user info to the request object
     req.user = {
-      userId: decoded.userId,  // Decoded user ID from the token
-      username: decoded.username // Decoded username from the token
+      userId: decoded.userId, // Decoded user ID from the token
+      username: decoded.username, // Decoded username from the token
     };
 
     next(); // Proceed to the next middleware or route handler
   } catch (error) {
-    res.status(401).json({ message: 'Token is not valid' }); // Return 401 if token verification fails
+    console.error("Token verification error:", error); // Log the error for debugging
+    return res.status(401).json({ message: "Token is not valid" }); // Return 401 if token verification fails
   }
 };
 

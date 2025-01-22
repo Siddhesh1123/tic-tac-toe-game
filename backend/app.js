@@ -2,6 +2,8 @@ import express from 'express';
 import connectDB from './config/db.js';
 import dotenv from 'dotenv';
 import cors from 'cors'; // Import CORS
+import cookieParser from 'cookie-parser';
+
 import authRoutes from './routes/authRoutes.js';
 import gameRoutes from './routes/gameRoutes.js';
 
@@ -13,6 +15,7 @@ const app = express();
 
 // Middleware: Parse incoming JSON requests
 app.use(express.json());
+app.use(cookieParser());
 
 // CORS Middleware
 app.use(

@@ -96,6 +96,10 @@ const joinGame = async (req, res) => {
       return res.status(400).json({ message: "Game is not available to join" });
     }
 
+    if (game.player1.toString() === player2Id) {
+      return res.status(400).json({ message: "You can't join your own game" });
+    }
+
     game.player2 = new mongoose.Types.ObjectId(player2Id);
     game.status = GAME_STATUS.ONGOING;
     await game.save();
@@ -181,7 +185,7 @@ const getGameState = async (req, res) => {
 
     const game = await Game.findById(gameId)
       .populate("player1 player2 winner")
-      .select("player1 player2 status winner moveHistory board createdAt name");
+      .select("player1 player2 status turn winner moveHistory board createdAt name");
     if (!game) {
       return res.status(404).json({ message: "Game not found" });
     }
@@ -218,23 +222,37 @@ const getMatchHistory = async (req, res) => {
       .select("player1 player2 status winner moveHistory board createdAt name");
 
     const matchHistory = games.map((game) => {
-      const opponent = game.player1._id.toString() === userId ? game.player2 : game.player1;
+      const opponent =
+        game.player1._id.toString() === userId ? game.player2 : game.player1;
+      const gameResult =
+        game.status === GAME_STATUS.FINISHED
+          ? game.winner
+            ? `${game.winner.username} wins` // Assuming winner has a `username` field
+            : "It's a draw"
+          : "Game is ongoing";
 
-      const gameResult = game.status === GAME_STATUS.FINISHED
-        ? game.winner
-          ? `${game.winner._id}  wins` // Assuming winner has a `name` field
-          : "It's a draw"
-        : "Game is ongoing";
+      // Enrich moveHistory with player names
+      // console.log(game)
+      const enrichedMoves = game.moveHistory.map((move) => {
+        const playerName = move.playerId.toString() === game.player1._id.toString() ? game.player1.username : game.player2.username;
+
+        return {
+          move: move.move,
+          playerName: playerName,
+          timestamp: move.timestamp,
+        };
+      });
 
       return {
         gameId: game._id,
         name: game.name,
         opponent: {
           id: opponent._id,
-          name: opponent.name,
+          name: game.player1._id.toString() === userId ? game.player2.username : game.player1.username,
         },
+        player1Username: game.player1.username,
         result: gameResult,
-        moves: game.moveHistory,
+        moves: enrichedMoves, // Use the enriched moves here
         finalBoard: game.board,
         playedAt: game.createdAt,
       };
@@ -251,6 +269,7 @@ const getMatchHistory = async (req, res) => {
     });
   }
 };
+
 
 // Fetch all games and remove the finished ones from the list
 const fetchAllGames = async (req, res) => {

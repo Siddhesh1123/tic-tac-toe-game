@@ -1,6 +1,7 @@
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+import cookieParser from "cookie-parser";
 
 // Register a new user
 const registerUser = async (req, res) => {
@@ -9,7 +10,7 @@ const registerUser = async (req, res) => {
 
     // Ensure username is unique
     if (await User.findOne({ username })) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: "User already exists" });
     }
 
     // Hash password before saving
@@ -17,10 +18,12 @@ const registerUser = async (req, res) => {
     const user = new User({ username, password: hashedPassword });
 
     await user.save();
-    res.status(201).json({ message: 'User registered successfully' });
+    res.status(200).json({ message: "User registered successfully" });
   } catch (error) {
     // Handle errors
-    res.status(500).json({ message: 'Error registering user', error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error registering user", error: error.message });
   }
 };
 
@@ -32,60 +35,83 @@ const loginUser = async (req, res) => {
     // Validate user credentials
     const user = await User.findOne({ username });
     if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(400).json({ message: 'Invalid username or password' });
+      return res.status(400).json({ message: "Invalid username or password" });
     }
 
     // Generate JWT token for session management
-    const token = jwt.sign({ userId: user._id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(
+      { userId: user._id, username: user.username },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
 
-    res.status(200).json({ message: 'Login successful', token });
+    // Generate Cookie for session management
+    const options = {
+      expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days
+      httpOnly: true,
+      secure: false, // Uncomment for production
+      sameSite: "Strict", // Helps prevent CSRF attacks
+    };
+
+    // Set the cookies separately
+    res.cookie("userId", user._id, options);
+    res.cookie("token", token, options);
+
+    // Send the response
+    res.status(200).json({
+      success: true,
+      token,
+      user,
+      message: "Logged in successfully",
+    });
   } catch (error) {
     // Handle errors
-    res.status(500).json({ message: 'Error logging in', error: error.message });
+    res.status(500).json({ message: "Error logging in", error: error.message });
   }
 };
+
 
 // Update user profile (username)
 const updateProfile = async (req, res) => {
   try {
-    const userId = req.user.userId;  // Extract user ID from JWT token
+    const userId = req.user.userId; // Extract user ID from JWT token
     const { username } = req.body;
 
     // Validate input data
     if (!username) {
-      return res.status(400).json({ message: 'Username is required' });
+      return res.status(400).json({ message: "Username is required" });
     }
 
     // Check if new username is already taken by another user
-    const existingUser = await User.findOne({ 
-      username, 
-      _id: { $ne: userId }  // Ensure it's not the same user
+    const existingUser = await User.findOne({
+      username,
+      _id: { $ne: userId }, // Ensure it's not the same user
     });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: "User already exists" });
     }
 
     // Update user profile with new username
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { username },
-      { new: true, select: '-password' }  // Return updated user data without password
+      { new: true, select: "-password" } // Return updated user data without password
     );
 
     // Handle case where user not found
     if (!updatedUser) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
     res.status(200).json({
-      message: 'Profile updated successfully',
-      user: updatedUser
+      message: "Profile updated successfully",
+      user: updatedUser,
     });
   } catch (error) {
     // Handle errors
-    res.status(500).json({ 
-      message: 'Error updating profile', 
-      error: error.message 
+    res.status(500).json({
+      message: "Error updating profile",
+      error: error.message,
     });
   }
 };
